@@ -41,6 +41,8 @@ for name in systems.aeron.model-proxy systems.aeron.model-proxy-tunnel; do
   fi
   sed "s#__HOME__#$HOME#g" "$REPO/deploy/studio/$name.plist" > "$plist"
   launchctl bootout "gui/$(id -u)/$name" 2>/dev/null || true
+  # bootout returns before the job is gone; bootstrapping too early fails with error 5.
+  i=0; while launchctl print "gui/$(id -u)/$name" >/dev/null 2>&1 && [ $i -lt 20 ]; do sleep 0.5; i=$((i+1)); done
   launchctl bootstrap "gui/$(id -u)" "$plist"
   echo "started $name"
 done
