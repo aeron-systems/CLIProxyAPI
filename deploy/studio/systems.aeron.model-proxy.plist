@@ -9,7 +9,7 @@
   </array>
   <key>WorkingDirectory</key><string>__HOME__/model-proxy</string>
   <key>EnvironmentVariables</key><dict>
-    <key>MANAGEMENT_STATIC_PATH</key><string>__HOME__/model-proxy/static/management.html</string>
+    <key>MANAGEMENT_STATIC_PATH</key><string>__HOME__/model-proxy/panel/management.html</string>
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>

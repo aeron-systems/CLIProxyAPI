@@ -1,6 +1,6 @@
 # Model proxy on the Mac Studio (aeron-systems fork of CLIProxyAPI).
 # install.sh renders this into ~/model-proxy/config.yaml (mode 600), replacing each
-# __NAME__ placeholder with the value from ~/model-proxy/keys.env. Never commit the
+# double-underscore placeholder with the value from ~/model-proxy/keys.env. Never commit the
 # rendered file: it holds the client keys and the management secret.
 config-version: 8
 
@@ -18,7 +18,7 @@ management:
   disable-control-panel: false
   # Never pull the panel from GitHub in the background. The panel served is the local
   # file at MANAGEMENT_STATIC_PATH (set in the launchd plist):
-  #   ~/model-proxy/static/management.html
+  #   ~/model-proxy/panel/management.html
   # Drop a new management.html there (for example the restyled build from
   # aeron-systems/Cli-Proxy-API-Management-Center) and reload the page; no restart needed.
   disable-auto-update-panel: true

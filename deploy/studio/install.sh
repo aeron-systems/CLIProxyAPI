@@ -8,7 +8,7 @@ PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin; export PATH
 REPO=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 DEST="$HOME/model-proxy"
 umask 077
-mkdir -p "$DEST/bin" "$DEST/auths" "$DEST/static" "$DEST/logs"
+mkdir -p "$DEST/bin" "$DEST/auths" "$DEST/panel" "$DEST/logs"
 chmod 700 "$DEST" "$DEST/auths"
 
 cd "$REPO"
@@ -41,6 +41,8 @@ for name in systems.aeron.model-proxy systems.aeron.model-proxy-tunnel; do
   fi
   sed "s#__HOME__#$HOME#g" "$REPO/deploy/studio/$name.plist" > "$plist"
   launchctl bootout "gui/$(id -u)/$name" 2>/dev/null || true
+  # bootout returns before the job is gone; bootstrapping too early fails with error 5.
+  i=0; while launchctl print "gui/$(id -u)/$name" >/dev/null 2>&1 && [ $i -lt 20 ]; do sleep 0.5; i=$((i+1)); done
   launchctl bootstrap "gui/$(id -u)" "$plist"
   echo "started $name"
 done
