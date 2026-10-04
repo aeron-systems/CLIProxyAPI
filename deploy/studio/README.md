@@ -12,6 +12,8 @@ The fork adds two features to upstream:
   longest window) resets soonest. Quota that would otherwise expire unused is spent first.
   Accounts whose window is exhausted are tried last. Accounts with no known reset follow
   fill-first order. An existing session binding still wins (session affinity).
+  The proxy fetches each Claude account's usage windows itself every 5 minutes and after a
+  429, so no dashboard needs to be open.
 - **Credential pools**: each client API key is bound to a pool of accounts, and this is
   enforced on the server (see "Pools").
 
@@ -102,7 +104,7 @@ Current bindings:
 |---|---|
 | studio-claude-code, air-claude-code, t3 (Eric's own work, "dev") | `shared` |
 | hydron-engine | `shared` for now. Eric decides: shared, or its own `hydron-engine` pool (reserved or not) |
-| munder-difflin | `munder-difflin`, reserved. Fails with `pool_exhausted` until its account is listed |
+| munder-difflin | `shared` for now. Its reserved `munder-difflin` pool stays defined and empty for later |
 
 After signing an account in, edit `~/model-proxy/config.yaml`. For example, to reserve one
 account for Munder Difflin:
