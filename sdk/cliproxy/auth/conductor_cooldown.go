@@ -762,6 +762,9 @@ func (m *Manager) MarkResult(ctx context.Context, result Result) {
 		}
 	}
 	modelKey := canonicalModelKey(result.Model)
+	if result.Error != nil && result.Error.HTTPStatus == http.StatusTooManyRequests {
+		m.kickQuotaRefresh(result.AuthID)
+	}
 
 	var authSnapshot *Auth
 	cooldownStateChanged := false

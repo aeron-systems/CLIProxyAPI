@@ -43,8 +43,8 @@ routing:
   # Credential pools (fork feature). See deploy/studio/README.md, "Pools".
   # Name credentials by auth file name (as listed in ~/model-proxy/auths) or account email.
   pools:
-    # Reserved: these accounts serve Munder Difflin only, never any other key.
-    # Until an account is listed here, Munder Difflin gets "pool_exhausted".
+    # Reserved: accounts listed here serve Munder Difflin only, never any other key.
+    # Unused for now: its key is on "shared". Point its pool-client here once listed.
     - name: "munder-difflin"
       reserved: true
       credentials: []   # e.g. ["claude-md@example.com.json"] or ["md@example.com"]
@@ -60,7 +60,9 @@ routing:
     - { name: "air-claude-code", api-key: "__MODEL_PROXY_KEY_AIR_CLAUDE_CODE__", pool: "shared" }
     - { name: "t3", api-key: "__MODEL_PROXY_KEY_T3__", pool: "shared" }
     - { name: "hydron-engine", api-key: "__MODEL_PROXY_KEY_HYDRON_ENGINE__", pool: "shared" }
-    - { name: "munder-difflin", api-key: "__MODEL_PROXY_KEY_MUNDER_DIFFLIN__", pool: "munder-difflin" }
+    # Munder Difflin shares for now (Eric 2026-10-04: "use the keys optimally"). Its reserved
+    # pool above stays defined, empty, for when it gets its own account.
+    - { name: "munder-difflin", api-key: "__MODEL_PROXY_KEY_MUNDER_DIFFLIN__", pool: "shared" }
   default-pool: "shared"
 
 oauth:

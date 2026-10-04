@@ -349,7 +349,7 @@ func runInPool[T any](ctx context.Context, opts cliproxyexecutor.Options, run fu
 		poolOpts.Metadata = cloneRequestMetadata(opts.Metadata)
 		prev, _ := poolOpts.Metadata[cliproxyexecutor.SelectedAuthCallbackMetadataKey].(func(string))
 		poolOpts.Metadata[cliproxyexecutor.SelectedAuthCallbackMetadataKey] = func(authID string) {
-			log.WithFields(log.Fields{"pool": current.pool, "client": current.client, "credential": authID}).Info("credential pool: routed request")
+			log.Infof("credential pool: routed request client=%s pool=%s credential=%s", current.client, current.pool, authID)
 			if prev != nil {
 				prev(authID)
 			}
@@ -362,7 +362,7 @@ func runInPool[T any](ctx context.Context, opts cliproxyexecutor.Options, run fu
 		if _, seen := visited[fallback]; fallback == "" || seen || current.pools.Invalid() != nil {
 			return result, poolExhaustedError(current, err)
 		}
-		log.WithFields(log.Fields{"pool": current.pool, "fallback": fallback, "client": current.client}).Warn("credential pool exhausted, using configured fallback pool")
+		log.Warnf("credential pool %s exhausted, using configured fallback pool %s (client=%s)", current.pool, fallback, current.client)
 		scope = &poolScope{pools: current.pools, pool: fallback, client: current.client}
 	}
 }
