@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>systems.aeron.model-proxy</string>
+  <!-- Wrapped in /bin/sh -c: a non-system binary started directly by launchd can lose LAN routes on this Mac. -->
+  <key>ProgramArguments</key><array>
+    <string>/bin/sh</string><string>-c</string>
+    <string>exec __HOME__/model-proxy/bin/cli-proxy-api -config __HOME__/model-proxy/config.yaml</string>
+  </array>
+  <key>WorkingDirectory</key><string>__HOME__/model-proxy</string>
+  <key>EnvironmentVariables</key><dict>
+    <key>MANAGEMENT_STATIC_PATH</key><string>__HOME__/model-proxy/panel/management.html</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>Umask</key><integer>63</integer>
+  <key>StandardOutPath</key><string>__HOME__/model-proxy/logs/model-proxy.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/model-proxy/logs/model-proxy.log</string>
+</dict></plist>
