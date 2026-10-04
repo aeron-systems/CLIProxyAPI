@@ -154,3 +154,9 @@ curl -s http://100.95.87.16:8317/v8/management/pools -H "Authorization: Bearer <
 ```
 
 With no accounts signed in, a model request answers `unknown provider for model ...`.
+
+## Dashboard over HTTPS on the tailnet
+
+Browsers force HTTPS on ts.net names, so the dashboard is served by Tailscale on port 8318:
+`/Applications/Tailscale.app/Contents/MacOS/Tailscale serve --bg --https=8318 http://127.0.0.1:8317`
+Open https://modus-studio.tail3f016a.ts.net:8318/management.html (tailnet only).
