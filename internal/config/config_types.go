@@ -351,7 +351,7 @@ type QuotaExceeded struct {
 // RoutingConfig configures how credentials are selected for requests.
 type RoutingConfig struct {
 	// Strategy selects the credential selection strategy.
-	// Supported values: "round-robin" (default), "weighted-round-robin", "fill-first".
+	// Supported values: "round-robin" (default), "weighted-round-robin", "fill-first", "reset-first".
 	Strategy string `yaml:"strategy,omitempty" json:"strategy,omitempty"`
 
 	// SessionAffinity enables universal session-sticky routing for all clients.
@@ -371,6 +371,37 @@ type RoutingConfig struct {
 	// When false, subagents are distributed across the credential pool via the fallback selector.
 	// Default: true. Ignored when SessionAffinity is false.
 	SessionAffinitySubagents *bool `yaml:"session-affinity-subagents,omitempty" json:"session-affinity-subagents,omitempty"`
+
+	// Pools confine client API keys to named groups of upstream credentials.
+	// When Pools or PoolClients is set, a keyed request is only routed to
+	// credentials in its key's pool, including on retries and failover.
+	Pools []CredentialPool `yaml:"pools,omitempty" json:"pools,omitempty"`
+
+	// PoolClients binds client API keys (from access.api-keys) to pools.
+	PoolClients []PoolClient `yaml:"pool-clients,omitempty" json:"pool-clients,omitempty"`
+
+	// DefaultPool is used by keys without a PoolClients entry. Default: "shared".
+	DefaultPool string `yaml:"default-pool,omitempty" json:"default-pool,omitempty"`
+}
+
+// CredentialPool is a named group of upstream credentials. The pool "shared"
+// is implicit and holds every credential not reserved by another pool.
+type CredentialPool struct {
+	Name string `yaml:"name" json:"name"`
+	// Credentials lists auth IDs, auth file names, labels or account emails.
+	Credentials []string `yaml:"credentials,omitempty" json:"credentials,omitempty"`
+	// Reserved excludes this pool's credentials from every other pool, including "shared".
+	Reserved bool `yaml:"reserved,omitempty" json:"reserved,omitempty"`
+	// Fallback names a pool to use only when this pool has no eligible credential.
+	// Empty (the default) means no spill-over.
+	Fallback string `yaml:"fallback,omitempty" json:"fallback,omitempty"`
+}
+
+// PoolClient binds one client API key to a pool.
+type PoolClient struct {
+	Name   string `yaml:"name" json:"name"`
+	APIKey string `yaml:"api-key" json:"api-key"`
+	Pool   string `yaml:"pool" json:"pool"`
 }
 
 // OAuthModelAlias defines a model ID alias for a specific channel.
