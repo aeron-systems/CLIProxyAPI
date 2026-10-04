@@ -37,7 +37,7 @@ Keys live in Infisical, project `shared-credentials`, env `prod`:
 ## Addresses
 
 - Tailnet: `http://100.95.87.16:8317` or `http://modus-studio.tail3f016a.ts.net:8317`
-- Cloudflare (for Hydron's engine): `https://models.aeronsystems.com`, behind a Cloudflare
+- Cloudflare (for Hydron's engine): `https://models.aeron.systems`, behind a Cloudflare
   Access app that admits only the service token `hydron-engine-model-proxy`. Send
   `CF-Access-Client-Id` and `CF-Access-Client-Secret` plus the proxy key.
 - Dashboard: `http://100.95.87.16:8317/management.html` (management key required).
