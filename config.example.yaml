@@ -193,6 +193,27 @@ routing:
     # Set to 0 to keep the legacy 60-second cooldown; set to -1 to disable transient error cooldowns.
     transient-error-cooldown-seconds: 0
 
+  # Credential pools bind client API keys to groups of upstream credentials, enforced
+  # server-side (unlike prefixes, a client cannot pick its pool through the model name).
+  # A keyed request is only routed to its pool's credentials, on retries and failover too,
+  # and session affinity applies inside the pool. "shared" is implicit: every credential
+  # not reserved by another pool. A reserved pool's credentials are excluded from every
+  # other pool, including "shared". When a pool has no eligible credential the request
+  # fails with code pool_exhausted naming the pool; it never spills over unless the pool
+  # sets an explicit fallback. Credentials are named by auth ID, auth file name, label
+  # or account email. Keys without a pool-clients entry use default-pool.
+  # GET /v8/management/routing/pools shows the pool of every key and credential.
+  # pools:
+  #   - name: "team-a"
+  #     credentials: ["team-a@example.com"]
+  #     reserved: true
+  #     fallback: ""              # e.g. "shared"; empty = no spill-over (default)
+  # pool-clients:
+  #   - name: "team-a-agent"
+  #     api-key: "your-api-key-1" # must also be listed in access.api-keys
+  #     pool: "team-a"
+  # default-pool: "shared"
+
 # Shared request/response behavior.
 requests:
   # Proxy URL. Supports socks5/http/https protocols. Example: socks5://user:pass@192.168.1.1:1080/

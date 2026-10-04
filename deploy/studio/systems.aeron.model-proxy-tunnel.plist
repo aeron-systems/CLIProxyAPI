@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>systems.aeron.model-proxy-tunnel</string>
+  <!-- Cloudflare tunnel "model-proxy-studio": models.aeronsystems.com -> http://127.0.0.1:8317 (ingress is set in Cloudflare). -->
+  <key>ProgramArguments</key><array>
+    <string>/bin/sh</string><string>-c</string>
+    <string>exec /opt/homebrew/bin/cloudflared tunnel --no-autoupdate run --token-file __HOME__/.cloudflared/model-proxy.token</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>__HOME__/model-proxy/logs/tunnel.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/model-proxy/logs/tunnel.log</string>
+</dict></plist>

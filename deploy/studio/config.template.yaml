@@ -1,0 +1,67 @@
+# Model proxy on the Mac Studio (aeron-systems fork of CLIProxyAPI).
+# install.sh renders this into ~/model-proxy/config.yaml (mode 600), replacing each
+# __NAME__ placeholder with the value from ~/model-proxy/keys.env. Never commit the
+# rendered file: it holds the client keys and the management secret.
+config-version: 8
+
+server:
+  # All interfaces: localhost (cloudflared), the tailnet (100.95.87.16) and the LAN.
+  # Every request still needs a client API key, and the Cloudflare hostname also needs
+  # the Access service token.
+  host: ""
+  port: 8317
+
+management:
+  # The panel and management API are reachable over the tailnet; every call needs the key.
+  allow-remote: true
+  secret-key: "__MODEL_PROXY_MANAGEMENT_KEY__"
+  disable-control-panel: false
+  # Never pull the panel from GitHub in the background. The panel served is the local
+  # file at MANAGEMENT_STATIC_PATH (set in the launchd plist):
+  #   ~/model-proxy/static/management.html
+  # Drop a new management.html there (for example the restyled build from
+  # aeron-systems/Cli-Proxy-API-Management-Center) and reload the page; no restart needed.
+  disable-auto-update-panel: true
+  # Only used if the local file is missing: first access downloads the latest release
+  # from this repository.
+  panel-github-repository: "https://github.com/aeron-systems/Cli-Proxy-API-Management-Center"
+
+access:
+  api-keys:
+    - "__MODEL_PROXY_KEY_STUDIO_CLAUDE_CODE__"
+    - "__MODEL_PROXY_KEY_AIR_CLAUDE_CODE__"
+    - "__MODEL_PROXY_KEY_T3__"
+    - "__MODEL_PROXY_KEY_HYDRON_ENGINE__"
+    - "__MODEL_PROXY_KEY_MUNDER_DIFFLIN__"
+
+routing:
+  # Spend the account whose weekly window resets soonest first (fork feature).
+  strategy: "reset-first"
+  session-affinity: true
+  session-affinity-ttl: "1h"
+
+  # Credential pools (fork feature). See deploy/studio/README.md, "Pools".
+  # Name credentials by auth file name (as listed in ~/model-proxy/auths) or account email.
+  pools:
+    # Reserved: these accounts serve Munder Difflin only, never any other key.
+    # Until an account is listed here, Munder Difflin gets "pool_exhausted".
+    - name: "munder-difflin"
+      reserved: true
+      credentials: []   # e.g. ["claude-md@example.com.json"] or ["md@example.com"]
+    # Hydron engine: currently uses the shared pool (see pool-clients). To give it
+    # its own accounts, list them here, set reserved: true if no one else may use
+    # them, and point its pool-client at "hydron-engine".
+    - name: "hydron-engine"
+      reserved: false
+      credentials: []
+  pool-clients:
+    # dev = Eric's own work (Studio, Air, T3): the shared pool.
+    - { name: "studio-claude-code", api-key: "__MODEL_PROXY_KEY_STUDIO_CLAUDE_CODE__", pool: "shared" }
+    - { name: "air-claude-code", api-key: "__MODEL_PROXY_KEY_AIR_CLAUDE_CODE__", pool: "shared" }
+    - { name: "t3", api-key: "__MODEL_PROXY_KEY_T3__", pool: "shared" }
+    - { name: "hydron-engine", api-key: "__MODEL_PROXY_KEY_HYDRON_ENGINE__", pool: "shared" }
+    - { name: "munder-difflin", api-key: "__MODEL_PROXY_KEY_MUNDER_DIFFLIN__", pool: "munder-difflin" }
+  default-pool: "shared"
+
+oauth:
+  auth-dir: "~/model-proxy/auths"
