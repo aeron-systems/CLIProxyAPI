@@ -35,8 +35,9 @@ type polledQuota struct {
 }
 
 type polledWindow struct {
-	reset     time.Time
-	exhausted bool
+	reset       time.Time
+	exhausted   bool
+	utilization float64 // percent used, 0-100; reported by the management quota view
 }
 
 var polledQuotas sync.Map // auth ID -> *polledQuota
@@ -103,7 +104,11 @@ func parseClaudeUsage(body []byte, observedAt time.Time) (*polledQuota, bool) {
 		if !ok {
 			return polledWindow{}, false
 		}
-		return polledWindow{reset: reset, exhausted: w.Utilization != nil && *w.Utilization >= 100}, true
+		used := 0.0
+		if w.Utilization != nil {
+			used = *w.Utilization
+		}
+		return polledWindow{reset: reset, exhausted: used >= 100, utilization: used}, true
 	}
 	q := &polledQuota{observedAt: observedAt, models: map[string]polledWindow{}}
 	weekly, okWeekly := read("seven_day")
@@ -139,7 +144,11 @@ func parseClaudeUsage(body []byte, observedAt time.Time) (*polledQuota, bool) {
 			if name == "" || !ok {
 				continue
 			}
-			q.models[name] = polledWindow{reset: reset, exhausted: l.Percent != nil && *l.Percent >= 100}
+			used := 0.0
+			if l.Percent != nil {
+				used = *l.Percent
+			}
+			q.models[name] = polledWindow{reset: reset, exhausted: used >= 100, utilization: used}
 		}
 	}
 	return q, okWeekly || !q.fiveHour.reset.IsZero() || len(q.models) > 0
