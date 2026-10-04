@@ -67,3 +67,16 @@ routing:
 
 oauth:
   auth-dir: "~/model-proxy/auths"
+
+# The Studio's own Ollama server (OpenAI-compatible, localhost only), served through the
+# proxy so Hydron's think door reaches it with the same key as everything else. Ollama
+# ignores the API key; one is listed because a group needs a key list.
+api-keys:
+  openai-compatibility:
+    - name: "studio-ollama"
+      base-url: "http://127.0.0.1:11434/v1"
+      models:
+        - name: "llama3.2:3b"
+          alias: "llama3.2:3b"
+      keys:
+        - api-key: "ollama"
