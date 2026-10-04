@@ -74,7 +74,21 @@ func orderResetFirst(auths []*Auth, model string, now time.Time) []*Auth {
 // window and whether the snapshot says a window is currently exhausted. A zero
 // time means the reset is unknown or already in the past.
 func quotaWindowReset(auth *Auth, model string, now time.Time) (time.Time, bool) {
-	if auth == nil || len(auth.Quota.Signals) == 0 {
+	if auth == nil {
+		return time.Time{}, false
+	}
+	reset, exhausted := observedWindowReset(auth, model, now)
+	polledReset, polledExhausted, polledAt := polledWindowReset(auth.ID, model, now)
+	// Prefer the newer of the passive response snapshot and the polled usage.
+	if !polledReset.IsZero() && (reset.IsZero() || polledAt.After(auth.Quota.ObservedAt)) {
+		reset = polledReset
+	}
+	return reset, exhausted || polledExhausted
+}
+
+// observedWindowReset reads the passive snapshot taken from response headers.
+func observedWindowReset(auth *Auth, model string, now time.Time) (time.Time, bool) {
+	if len(auth.Quota.Signals) == 0 {
 		return time.Time{}, false
 	}
 	signals := make(map[string]string, len(auth.Quota.Signals))
@@ -121,7 +135,11 @@ func claudeWindowReset(signals map[string]string, model string, now time.Time) (
 			soonest = reset
 		}
 	}
-	if reset, ok := parseResetTime(signals[prefix+"5h-reset"]); ok && reset.After(now) && signals[prefix+"5h-status"] == "rejected" {
+	fiveHourFull := signals[prefix+"5h-status"] == "rejected"
+	if u, errU := strconv.ParseFloat(signals[prefix+"5h-utilization"], 64); errU == nil && u >= 1 {
+		fiveHourFull = true
+	}
+	if reset, ok := parseResetTime(signals[prefix+"5h-reset"]); ok && reset.After(now) && fiveHourFull {
 		exhausted = true
 	}
 	return soonest, exhausted

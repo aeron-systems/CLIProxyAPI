@@ -143,6 +143,10 @@ type resultPolicyHolder struct {
 
 // Manager orchestrates auth lifecycle, selection, execution, and persistence.
 type Manager struct {
+	// quotaKick asks the quota poller to refresh one credential (see quota_poller.go).
+	quotaKick     chan string
+	quotaKickOnce sync.Once
+
 	store                     Store
 	cooldownStore             CooldownStateStore
 	pendingCooldownStateStore CooldownStateStore
