@@ -40,3 +40,16 @@ func TestBuildQuotaViewOrdersAndReportsWindows(t *testing.T) {
 		}
 	}
 }
+
+func TestMaskedAPIKeyNameNeverReturnsTheKey(t *testing.T) {
+	key := "sk-or-v1-0123456789abcdef"
+	if got := maskedAPIKeyName("", key); got != "api key ...cdef" {
+		t.Fatalf("got %q", got)
+	}
+	if got := maskedAPIKeyName(key, key); got == key {
+		t.Fatalf("label equal to the key leaked it")
+	}
+	if got := maskedAPIKeyName("openrouter", key); got != "openrouter" {
+		t.Fatalf("got %q", got)
+	}
+}

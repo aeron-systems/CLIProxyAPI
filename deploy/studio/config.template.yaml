@@ -54,6 +54,11 @@ routing:
     - name: "hydron-engine"
       reserved: false
       credentials: []
+    # Norea's dedicated account (Eric, 2026-10-04): reserved, so intern.aiml serves
+    # Norea only and is left out of shared and every other pool.
+    - name: "norea"
+      reserved: true
+      credentials: ["intern.aiml@aeronsystems.com"]
   pool-clients:
     # dev = Eric's own work (Studio, Air, T3): the shared pool.
     - { name: "studio-claude-code", api-key: "__MODEL_PROXY_KEY_STUDIO_CLAUDE_CODE__", pool: "shared" }
@@ -63,6 +68,8 @@ routing:
     # Munder Difflin shares for now (Eric 2026-10-04: "use the keys optimally"). Its reserved
     # pool above stays defined, empty, for when it gets its own account.
     - { name: "munder-difflin", api-key: "__MODEL_PROXY_KEY_MUNDER_DIFFLIN__", pool: "shared" }
+    # Norea (the agent-run tenant in Hydron): its own reserved pool, intern.aiml only.
+    - { name: "norea", api-key: "__MODEL_PROXY_KEY_NOREA__", pool: "norea" }
   default-pool: "shared"
 
 oauth:
