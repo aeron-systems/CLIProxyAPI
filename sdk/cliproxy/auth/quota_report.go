@@ -63,7 +63,11 @@ func BuildQuotaView(auths []*Auth, pool, model, strategy string, now time.Time) 
 		if a == nil {
 			continue
 		}
-		_, account := a.AccountInfo()
+		kind, account := a.AccountInfo()
+		if kind == "api_key" {
+			// Never hand an API key out through the view: name it by its label, or its last four.
+			account = maskedAPIKeyName(a.Label, account)
+		}
 		qc := QuotaCredential{
 			ID: a.ID, Account: account, Provider: a.Provider, Pools: []string{},
 			Disabled: a.Disabled || a.Status == StatusDisabled, Unavailable: a.Unavailable,
@@ -158,4 +162,15 @@ func containsString(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// maskedAPIKeyName names an API-key credential without revealing the key.
+func maskedAPIKeyName(label, key string) string {
+	if l := strings.TrimSpace(label); l != "" && l != key {
+		return l
+	}
+	if len(key) <= 4 {
+		return "api key"
+	}
+	return "api key ..." + key[len(key)-4:]
 }
