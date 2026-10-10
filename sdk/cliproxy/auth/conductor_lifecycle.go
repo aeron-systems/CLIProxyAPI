@@ -244,7 +244,8 @@ func (m *Manager) updateInternal(ctx context.Context, base, auth *Auth, mode upd
 				cooldownStateChanged = true
 			}
 		}
-		if existing.Quota.Exceeded && existing.Quota.Reason == "credential_quota" && existing.Quota.NextRecoverAt.After(time.Now()) {
+		// New credentials lift a denial cooldown; a quota cooldown still applies.
+		if isCredentialWideCooldown(existing.Quota, time.Now()) && !(credChanged && isCredentialDenialReason(existing.Quota.Reason)) {
 			auth.Unavailable = existing.Unavailable
 			auth.NextRetryAfter = existing.NextRetryAfter
 			auth.Quota = existing.Quota

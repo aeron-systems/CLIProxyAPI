@@ -768,6 +768,7 @@ func (m *Manager) MarkResult(ctx context.Context, result Result) {
 
 	var authSnapshot *Auth
 	cooldownStateChanged := false
+	credentialWide := result.CredentialScope
 	now := time.Now()
 
 	m.mu.Lock()
@@ -797,13 +798,16 @@ func (m *Manager) MarkResult(ctx context.Context, result Result) {
 		wasTerminalUnauthorized := hasUnauthorizedAuthFailure(auth)
 
 		if result.Success {
+			if clearCredentialDenial(auth) {
+				credentialWide = true
+			}
 			if wasTerminalUnauthorized {
 				if modelKey != "" {
 					state := ensureModelState(auth, modelKey)
 					modelState = state
 					resetModelState(state, now)
 				}
-			} else if auth.Quota.Reason == "credential_quota" && auth.Quota.NextRecoverAt.After(now) {
+			} else if isCredentialWideCooldown(auth.Quota, now) {
 				// Retain active credential-scoped cooldown
 			} else if modelKey != "" {
 				state := ensureModelState(auth, modelKey)
@@ -877,6 +881,11 @@ func (m *Manager) MarkResult(ctx context.Context, result Result) {
 							} else {
 								next := now.Add(30 * time.Minute)
 								state.NextRetryAfter = next
+								if !wasTerminalUnauthorized && statusCode != 401 {
+									// The account was refused, not the model: cool every model.
+									applyCredentialDenialCooldown(auth, statusCode, now)
+									credentialWide = true
+								}
 							}
 						case 404:
 							if disableCooling {
@@ -999,6 +1008,9 @@ func (m *Manager) MarkResult(ctx context.Context, result Result) {
 				}
 				if !wasTerminalUnauthorized {
 					applyAuthFailureState(auth, result.Error, result.RetryAfter, now, disableCooling)
+					if credentialDenialReason(statusCodeFromResult(result.Error)) != "" {
+						credentialWide = true
+					}
 				}
 			}
 		}
@@ -1030,13 +1042,13 @@ func (m *Manager) MarkResult(ctx context.Context, result Result) {
 	m.mu.Unlock()
 	if m.scheduler != nil && authSnapshot != nil {
 		var targetModels []string
-		if !result.CredentialScope && modelKey != "" {
+		if !credentialWide && modelKey != "" {
 			targetModels = append(targetModels, modelKey)
 			if routeKey := canonicalModelKey(result.RouteModel); routeKey != "" && routeKey != modelKey {
 				targetModels = append(targetModels, routeKey)
 			}
 		}
-		m.scheduler.upsertAuthResult(authSnapshot, targetModels, result.CredentialScope)
+		m.scheduler.upsertAuthResult(authSnapshot, targetModels, credentialWide)
 	}
 	if authSnapshot != nil && cooldownStateChanged {
 		m.persistCooldownStates(context.Background())
@@ -1340,7 +1352,7 @@ func updateAggregatedAvailability(auth *Auth, now time.Time) {
 		auth.Unavailable = true
 		return
 	}
-	if auth.Quota.Exceeded && auth.Quota.Reason == "credential_quota" && auth.Quota.NextRecoverAt.After(now) {
+	if isCredentialWideCooldown(auth.Quota, now) {
 		auth.Unavailable = true
 		return
 	}
@@ -1408,6 +1420,10 @@ func updateAggregatedAvailability(auth *Auth, now time.Time) {
 		auth.Quota.BackoffLevel = maxBackoffLevel
 	} else if auth.Quota.Exceeded && auth.Quota.NextRecoverAt.After(now) {
 		// Retain active auth-level quota cooldown
+	} else if isCredentialDenialReason(auth.Quota.Reason) {
+		// An expired denial keeps its backoff level until a success clears it.
+		auth.Quota.Exceeded = false
+		auth.Quota.NextRecoverAt = time.Time{}
 	} else {
 		auth.Quota.Exceeded = false
 		auth.Quota.Reason = ""
@@ -1422,7 +1438,12 @@ func clearAggregatedAvailability(auth *Auth) {
 	}
 	auth.Unavailable = false
 	auth.NextRetryAfter = time.Time{}
-	applyCooldownFields(&auth.Quota, QuotaState{})
+	cleared := QuotaState{}
+	if isCredentialDenialReason(auth.Quota.Reason) {
+		// An expired denial keeps its backoff level until a success clears it.
+		cleared.Reason, cleared.BackoffLevel = auth.Quota.Reason, auth.Quota.BackoffLevel
+	}
+	applyCooldownFields(&auth.Quota, cleared)
 }
 
 func hasModelError(auth *Auth, now time.Time) bool {
@@ -1883,10 +1904,24 @@ func isModelSupportResultError(err *Error) bool {
 		return true
 	}
 	status := statusCodeFromResult(err)
+	if status == http.StatusForbidden {
+		// A 403 that refuses one model stays per-model; any other 403 refuses the account.
+		return isModelSupportErrorMessage(err.Message) || isModelPermissionDeniedMessage(err.Message)
+	}
 	if status != http.StatusBadRequest && status != http.StatusUnprocessableEntity && status != http.StatusNotFound {
 		return false
 	}
 	return isModelSupportErrorMessage(err.Message)
+}
+
+// isModelPermissionDeniedMessage matches a permission denial that names a model,
+// such as a Vertex or Gemini PERMISSION_DENIED on one model's resource.
+func isModelPermissionDeniedMessage(message string) bool {
+	lower := strings.ToLower(message)
+	if !strings.Contains(lower, "permission_denied") && !strings.Contains(lower, "permission denied") {
+		return false
+	}
+	return strings.Contains(lower, "model")
 }
 
 func isCloudflareChallengeErrorMessage(message string) bool {
@@ -2290,11 +2325,11 @@ func applyAuthFailureState(auth *Auth, resultErr *Error, retryAfter *time.Durati
 				auth.NextRetryAfter = now.Add(30 * time.Minute)
 			}
 		case 402, 403:
-			auth.StatusMessage = "payment_required"
+			auth.StatusMessage = credentialDenialReason(statusCode)
 			if disableCooling {
 				auth.NextRetryAfter = time.Time{}
 			} else {
-				auth.NextRetryAfter = now.Add(30 * time.Minute)
+				applyCredentialDenialCooldown(auth, statusCode, now)
 			}
 		case 404:
 			auth.StatusMessage = "not_found"

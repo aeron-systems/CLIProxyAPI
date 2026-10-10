@@ -17,19 +17,21 @@ type QuotaWindow struct {
 
 // QuotaCredential is one signed-in account, its windows and whether it can take work now.
 type QuotaCredential struct {
-	ID           string        `json:"id"`
-	Account      string        `json:"account"`
-	Provider     string        `json:"provider"`
-	Pools        []string      `json:"pools"`
-	Disabled     bool          `json:"disabled"`
-	Unavailable  bool          `json:"unavailable"`
-	CoolingUntil *time.Time    `json:"cooling_until,omitempty"`
-	Status       string        `json:"status"`
-	StatusText   string        `json:"status_message,omitempty"`
-	ObservedAt   *time.Time    `json:"observed_at,omitempty"`
-	FiveHour     *QuotaWindow  `json:"five_hour,omitempty"`
-	SevenDay     *QuotaWindow  `json:"seven_day,omitempty"`
-	Models       []QuotaWindow `json:"models"`
+	ID           string     `json:"id"`
+	Account      string     `json:"account"`
+	Provider     string     `json:"provider"`
+	Pools        []string   `json:"pools"`
+	Disabled     bool       `json:"disabled"`
+	Unavailable  bool       `json:"unavailable"`
+	CoolingUntil *time.Time `json:"cooling_until,omitempty"`
+	// CoolingReason names a credential-wide cooldown: forbidden, payment_required or credential_quota.
+	CoolingReason string        `json:"cooling_reason,omitempty"`
+	Status        string        `json:"status"`
+	StatusText    string        `json:"status_message,omitempty"`
+	ObservedAt    *time.Time    `json:"observed_at,omitempty"`
+	FiveHour      *QuotaWindow  `json:"five_hour,omitempty"`
+	SevenDay      *QuotaWindow  `json:"seven_day,omitempty"`
+	Models        []QuotaWindow `json:"models"`
 	// Usable: the selector would consider this account for a new session right now.
 	Usable bool `json:"usable"`
 }
@@ -82,6 +84,11 @@ func BuildQuotaView(auths []*Auth, pool, model, strategy string, now time.Time) 
 		if !a.NextRetryAfter.IsZero() && a.NextRetryAfter.After(now) {
 			t := a.NextRetryAfter
 			qc.CoolingUntil = &t
+		}
+		if isCredentialWideCooldown(a.Quota, now) {
+			t := a.Quota.NextRecoverAt
+			qc.CoolingUntil = &t
+			qc.CoolingReason = a.Quota.Reason
 		}
 		if q := loadPolledQuota(a.ID); q != nil {
 			t := q.observedAt
