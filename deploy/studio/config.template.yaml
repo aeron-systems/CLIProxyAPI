@@ -39,6 +39,12 @@ routing:
   strategy: "reset-first"
   session-affinity: true
   session-affinity-ttl: "1h"
+  # A pinned session leaves its account when that account's weekly window is
+  # >= 90% used, or when another account in the pool resets >= 24h sooner and is
+  # under 90% and not at its 5-hour cap (T-353). Defaults shown; on by default.
+  session-affinity-move: true
+  session-affinity-move-threshold: 90
+  session-affinity-move-margin: "24h"
 
   # Credential pools (fork feature). See deploy/studio/README.md, "Pools".
   # Name credentials by auth file name (as listed in ~/model-proxy/auths) or account email.
