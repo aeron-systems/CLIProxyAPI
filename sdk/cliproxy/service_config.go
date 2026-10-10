@@ -72,11 +72,16 @@ func normalizedRoutingRuntimeState(cfg *config.Config) routingRuntimeState {
 		state.affinityMove = state.affinityMove && *cfg.Routing.SessionAffinityMove
 	}
 	if t := cfg.Routing.SessionAffinityMoveThreshold; t != nil && *t > 0 && *t <= 100 {
+		if *t <= 1 {
+			log.Warnf("routing: session-affinity-move-threshold %v is a percent (0-100), not a fraction; did you mean %v?", *t, *t*100)
+		}
 		state.affinityMoveThreshold = *t
 	}
 	if margin := strings.TrimSpace(cfg.Routing.SessionAffinityMoveMargin); margin != "" {
 		if parsed, errParse := time.ParseDuration(margin); errParse == nil && parsed >= 0 {
 			state.affinityMoveMargin = parsed
+		} else {
+			log.Warnf("routing: session-affinity-move-margin %q is not a valid non-negative duration; using %s", margin, state.affinityMoveMargin)
 		}
 	}
 	return state

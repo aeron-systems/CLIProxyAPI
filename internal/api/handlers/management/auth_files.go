@@ -557,7 +557,7 @@ func reconcileAuthFileCooldownState(auth *coreauth.Auth, now time.Time) (unavail
 		if !auth.NextRetryAfter.IsZero() && auth.NextRetryAfter.After(now) {
 			hasActiveCredCooldown = true
 		}
-		if auth.Quota.Exceeded && auth.Quota.Reason == "credential_quota" && auth.Quota.NextRecoverAt.After(now) {
+		if coreauth.IsCredentialWideCooldown(auth, now) {
 			hasActiveCredCooldown = true
 			if nextRetry.IsZero() || auth.Quota.NextRecoverAt.After(nextRetry) {
 				nextRetry = auth.Quota.NextRecoverAt
