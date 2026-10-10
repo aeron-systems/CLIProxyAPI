@@ -1904,10 +1904,24 @@ func isModelSupportResultError(err *Error) bool {
 		return true
 	}
 	status := statusCodeFromResult(err)
+	if status == http.StatusForbidden {
+		// A 403 that refuses one model stays per-model; any other 403 refuses the account.
+		return isModelSupportErrorMessage(err.Message) || isModelPermissionDeniedMessage(err.Message)
+	}
 	if status != http.StatusBadRequest && status != http.StatusUnprocessableEntity && status != http.StatusNotFound {
 		return false
 	}
 	return isModelSupportErrorMessage(err.Message)
+}
+
+// isModelPermissionDeniedMessage matches a permission denial that names a model,
+// such as a Vertex or Gemini PERMISSION_DENIED on one model's resource.
+func isModelPermissionDeniedMessage(message string) bool {
+	lower := strings.ToLower(message)
+	if !strings.Contains(lower, "permission_denied") && !strings.Contains(lower, "permission denied") {
+		return false
+	}
+	return strings.Contains(lower, "model")
 }
 
 func isCloudflareChallengeErrorMessage(message string) bool {

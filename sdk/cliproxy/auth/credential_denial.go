@@ -9,7 +9,10 @@ import (
 
 // Credential denial cooldown: an upstream answering 402 or 403 has refused the
 // account itself, not one model, so the whole credential cools down with backoff
-// (30m, 1h, 2h, 4h, capped at 6h). A success or new credentials clear it.
+// (30m, 1h, 2h, 4h, capped at 6h). A success or new credentials (including a
+// routine token refresh) clear it. A 403 that names one model stays per-model.
+// The backoff level is kept only in memory and in the live cooldown record, so it
+// resets to 30m after a restart or when a quota cooldown rewrites Reason (fail open).
 // 401 keeps its own handling: token refresh, then the terminal unauthorized state.
 const (
 	credentialDenialBackoffBase = 30 * time.Minute
@@ -59,6 +62,14 @@ func applyCredentialDenialCooldown(auth *Auth, status int, now time.Time) time.T
 	reason := credentialDenialReason(status)
 	if auth == nil || reason == "" {
 		return time.Time{}
+	}
+	if auth.Quota.Reason == "credential_quota" && auth.Quota.Exceeded &&
+		!auth.Quota.NextRecoverAt.Before(now.Add(credentialDenialBackoffBase)) {
+		// A longer live credential quota window already covers the shortest denial
+		// window: keep it rather than shorten it.
+		auth.Unavailable = true
+		auth.NextRetryAfter = auth.Quota.NextRecoverAt
+		return auth.Quota.NextRecoverAt
 	}
 	level := 0
 	if isCredentialDenialReason(auth.Quota.Reason) {

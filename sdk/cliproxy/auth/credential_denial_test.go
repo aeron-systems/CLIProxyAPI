@@ -12,19 +12,25 @@ import (
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
 )
 
-// denialTestExecutor answers 403 for the denied credential and succeeds for any other.
+// denialTestExecutor answers 403 for the denied credential, or for the denied model
+// with modelMsg, and succeeds otherwise.
 type denialTestExecutor struct {
-	mu     sync.Mutex
-	denied string
-	calls  map[string]int
+	mu          sync.Mutex
+	denied      string
+	deniedModel string
+	modelMsg    string
+	calls       map[string]int
 }
 
 func (e *denialTestExecutor) Identifier() string { return "denial-test-provider" }
 
-func (e *denialTestExecutor) Execute(_ context.Context, auth *Auth, _ cliproxyexecutor.Request, _ cliproxyexecutor.Options) (cliproxyexecutor.Response, error) {
+func (e *denialTestExecutor) Execute(_ context.Context, auth *Auth, req cliproxyexecutor.Request, _ cliproxyexecutor.Options) (cliproxyexecutor.Response, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.calls[auth.ID]++
+	if e.deniedModel != "" && req.Model == e.deniedModel {
+		return cliproxyexecutor.Response{}, compactTestStatusError{code: http.StatusForbidden, msg: e.modelMsg}
+	}
 	if auth.ID == e.denied {
 		return cliproxyexecutor.Response{}, compactTestStatusError{code: http.StatusForbidden, msg: `{"type":"error","error":{"type":"permission_error","message":"OAuth authentication is currently not allowed for this organization."}}`}
 	}
@@ -170,5 +176,99 @@ func TestBuildQuotaView_CoolingCredentialIsNotUsable(t *testing.T) {
 		if cr.Usable || cr.CoolingReason != "forbidden" || cr.CoolingUntil == nil {
 			t.Fatalf("refused credential: %+v, want usable=false, cooling_reason=forbidden, cooling_until set", cr)
 		}
+	}
+}
+
+// A 403 that refuses one model must not take the account out for its other models.
+func TestManager_ModelScopedForbiddenStaysPerModel(t *testing.T) {
+	cases := map[string]string{
+		"plan":   `{"error":{"message":"The model denial-scope-b is not available for your plan."}}`,
+		"vertex": `{"error":{"code":403,"status":"PERMISSION_DENIED","message":"Permission denied on resource projects/p/locations/l/publishers/google/models/denial-scope-b"}}`,
+	}
+	for name, msg := range cases {
+		t.Run(name, func(t *testing.T) {
+			id := "denial-scope-" + name
+			executor := &denialTestExecutor{deniedModel: "denial-scope-b", modelMsg: msg, calls: map[string]int{}}
+			m := NewManager(nil, nil, nil)
+			m.RegisterExecutor(executor)
+			if _, err := m.Register(context.Background(), &Auth{ID: id, Provider: executor.Identifier(), Status: StatusActive}); err != nil {
+				t.Fatalf("Register: %v", err)
+			}
+			registry.GetGlobalRegistry().RegisterClient(id, executor.Identifier(), []*registry.ModelInfo{{ID: "denial-scope-a"}, {ID: "denial-scope-b"}})
+			t.Cleanup(func() { registry.GetGlobalRegistry().UnregisterClient(id) })
+
+			reqB := cliproxyexecutor.Request{Model: "denial-scope-b", Payload: []byte(`{"input":"hello"}`)}
+			if _, err := m.Execute(context.Background(), []string{executor.Identifier()}, reqB, cliproxyexecutor.Options{}); err == nil {
+				t.Fatal("Execute model B: want the 403")
+			}
+			reqA := cliproxyexecutor.Request{Model: "denial-scope-a", Payload: []byte(`{"input":"hello"}`)}
+			if _, err := m.Execute(context.Background(), []string{executor.Identifier()}, reqA, cliproxyexecutor.Options{}); err != nil {
+				t.Fatalf("Execute model A: %v, want the same credential to serve it", err)
+			}
+			if got := executor.callsFor(id); got != 2 {
+				t.Fatalf("credential reached upstream %d times, want 2 (B refused, A served)", got)
+			}
+			auth, _ := m.GetByID(id)
+			if IsCredentialWideCooldown(auth, time.Now()) {
+				t.Fatalf("quota = %+v, want no credential-wide cooldown", auth.Quota)
+			}
+			if state := auth.ModelStates["denial-scope-b"]; state == nil || !state.NextRetryAfter.After(time.Now()) {
+				t.Fatalf("model B state = %+v, want it cooling", state)
+			}
+		})
+	}
+}
+
+func TestIsModelSupportResultError_ForbiddenScope(t *testing.T) {
+	cases := []struct {
+		msg   string
+		model bool
+	}{
+		{"This model is not available for your plan", true},
+		{`{"error":{"status":"PERMISSION_DENIED","message":"Permission denied on resource .../models/gemini-x"}}`, true},
+		{`{"error":{"type":"permission_error","message":"oauth_not_allowed_for_organization"}}`, false},
+		{"OAuth authentication is currently not allowed for this organization.", false},
+		{`{"error":{"status":"PERMISSION_DENIED","message":"The caller does not have permission"}}`, false},
+	}
+	for _, c := range cases {
+		err := &Error{HTTPStatus: http.StatusForbidden, Message: c.msg}
+		if got := isModelSupportResultError(err); got != c.model {
+			t.Errorf("isModelSupportResultError(403 %q) = %v, want %v", c.msg, got, c.model)
+		}
+	}
+}
+
+// A whole-account 403 still cools the credential for every model.
+func TestManager_OrganizationForbiddenIsCredentialWide(t *testing.T) {
+	m := NewManager(nil, nil, nil)
+	if _, err := m.Register(context.Background(), &Auth{ID: "denial-org", Provider: "claude", Status: StatusActive}); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	m.MarkResult(context.Background(), Result{
+		AuthID: "denial-org", Provider: "claude", Model: "denial-org-a",
+		Error: &Error{HTTPStatus: http.StatusForbidden, Message: `{"error":{"type":"permission_error","message":"oauth_not_allowed_for_organization"}}`},
+	})
+	auth, _ := m.GetByID("denial-org")
+	if !IsCredentialWideCooldown(auth, time.Now()) || auth.Quota.Reason != "forbidden" {
+		t.Fatalf("quota = %+v, want a forbidden credential-wide cooldown", auth.Quota)
+	}
+}
+
+// A denial landing inside a longer credential quota window must not shorten it.
+func TestCredentialDenialCooldown_KeepsLongerQuotaWindow(t *testing.T) {
+	now := time.Now()
+	quotaUntil := now.Add(3 * time.Hour)
+	auth := &Auth{ID: "denial-quota", Provider: "claude", Quota: QuotaState{Exceeded: true, Reason: "credential_quota", NextRecoverAt: quotaUntil}}
+	if next := applyCredentialDenialCooldown(auth, http.StatusForbidden, now); !next.Equal(quotaUntil) {
+		t.Fatalf("deadline = %v, want the quota window %v", next, quotaUntil)
+	}
+	if !auth.NextRetryAfter.Equal(quotaUntil) || auth.Quota.Reason != "credential_quota" {
+		t.Fatalf("auth = retry %v reason %q, want the quota window kept", auth.NextRetryAfter, auth.Quota.Reason)
+	}
+
+	// A shorter quota window gives way to the 30m denial.
+	auth = &Auth{ID: "denial-quota-short", Provider: "claude", Quota: QuotaState{Exceeded: true, Reason: "credential_quota", NextRecoverAt: now.Add(5 * time.Minute)}}
+	if next := applyCredentialDenialCooldown(auth, http.StatusForbidden, now); next.Sub(now) != 30*time.Minute || auth.Quota.Reason != "forbidden" {
+		t.Fatalf("deadline %v reason %q, want 30m forbidden", next.Sub(now), auth.Quota.Reason)
 	}
 }
