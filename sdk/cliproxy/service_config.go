@@ -29,6 +29,9 @@ type routingRuntimeState struct {
 	sessionAffinity          bool
 	sessionAffinityTTL       time.Duration
 	sessionAffinitySubagents bool
+	affinityMove             bool
+	affinityMoveThreshold    float64
+	affinityMoveMargin       time.Duration
 }
 
 func normalizedRoutingRuntimeState(cfg *config.Config) routingRuntimeState {
@@ -36,6 +39,8 @@ func normalizedRoutingRuntimeState(cfg *config.Config) routingRuntimeState {
 		strategy:                 "round-robin",
 		sessionAffinityTTL:       time.Hour,
 		sessionAffinitySubagents: true,
+		affinityMoveThreshold:    coreauth.DefaultAffinityMoveThreshold,
+		affinityMoveMargin:       coreauth.DefaultAffinityMoveMargin,
 	}
 	if cfg == nil {
 		return state
@@ -61,6 +66,19 @@ func normalizedRoutingRuntimeState(cfg *config.Config) routingRuntimeState {
 	if state.sessionAffinity && cfg.Routing.SessionAffinitySubagents != nil {
 		state.sessionAffinitySubagents = *cfg.Routing.SessionAffinitySubagents
 	}
+	// Moving pinned sessions only applies to reset-first with affinity; on by default there.
+	state.affinityMove = state.sessionAffinity && state.strategy == "reset-first"
+	if cfg.Routing.SessionAffinityMove != nil {
+		state.affinityMove = state.affinityMove && *cfg.Routing.SessionAffinityMove
+	}
+	if t := cfg.Routing.SessionAffinityMoveThreshold; t != nil && *t > 0 && *t <= 100 {
+		state.affinityMoveThreshold = *t
+	}
+	if margin := strings.TrimSpace(cfg.Routing.SessionAffinityMoveMargin); margin != "" {
+		if parsed, errParse := time.ParseDuration(margin); errParse == nil && parsed >= 0 {
+			state.affinityMoveMargin = parsed
+		}
+	}
 	return state
 }
 
@@ -78,10 +96,15 @@ func newRoutingSelector(state routingRuntimeState) coreauth.Selector {
 	}
 	if state.sessionAffinity {
 		subagents := state.sessionAffinitySubagents
+		var move *coreauth.AffinityMovePolicy
+		if state.affinityMove {
+			move = &coreauth.AffinityMovePolicy{Threshold: state.affinityMoveThreshold, Margin: state.affinityMoveMargin}
+		}
 		selector = coreauth.NewSessionAffinitySelectorWithConfig(coreauth.SessionAffinityConfig{
 			Fallback:         selector,
 			TTL:              state.sessionAffinityTTL,
 			SubagentAffinity: &subagents,
+			MovePolicy:       move,
 		})
 	}
 	return selector
