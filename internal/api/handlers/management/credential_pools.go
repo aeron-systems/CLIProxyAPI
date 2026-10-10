@@ -49,7 +49,7 @@ func (h *Handler) GetCredentialPools(c *gin.Context) {
 				continue
 			}
 			accounts = append(accounts, auth.ID)
-			if _, account := auth.AccountInfo(); account != "" && account != auth.ID {
+			if account := coreauth.SafeAccountName(auth); account != "" && account != auth.ID {
 				accounts = append(accounts, account)
 			}
 		}
@@ -69,11 +69,10 @@ func (h *Handler) GetCredentialPools(c *gin.Context) {
 		if auth == nil {
 			continue
 		}
-		_, account := auth.AccountInfo()
 		credentials = append(credentials, gin.H{
 			"id":          auth.ID,
 			"provider":    auth.Provider,
-			"account":     account,
+			"account":     coreauth.SafeAccountName(auth),
 			"pools":       pools.PoolsFor(auth),
 			"reserved-by": pools.ReservedBy(auth),
 		})

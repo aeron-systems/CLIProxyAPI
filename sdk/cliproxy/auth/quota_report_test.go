@@ -53,3 +53,22 @@ func TestMaskedAPIKeyNameNeverReturnsTheKey(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestSafeAccountNameNeverReturnsAnAPIKey(t *testing.T) {
+	key := "sk-or-v1-0123456789abcdef0123456789abcdef"
+	apiKeyAuth := &Auth{ID: "openai-compatibility:openrouter:d1", Provider: "openai-compatible-openrouter",
+		Attributes: map[string]string{AttributeAPIKey: key}}
+	if kind, _ := apiKeyAuth.AccountInfo(); kind != "api_key" {
+		t.Fatalf("test auth kind = %q, want api_key", kind)
+	}
+	if got := SafeAccountName(apiKeyAuth); got == key || got != "api key ...cdef" {
+		t.Fatalf("SafeAccountName = %q", got)
+	}
+	oauth := &Auth{ID: "claude-x.json", Provider: "claude", Metadata: map[string]any{"email": "a@example.com"}}
+	if got := SafeAccountName(oauth); got != "a@example.com" {
+		t.Fatalf("SafeAccountName(oauth) = %q", got)
+	}
+	if got := SafeAccountName(nil); got != "" {
+		t.Fatalf("SafeAccountName(nil) = %q", got)
+	}
+}
