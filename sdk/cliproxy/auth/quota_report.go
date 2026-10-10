@@ -63,11 +63,7 @@ func BuildQuotaView(auths []*Auth, pool, model, strategy string, now time.Time) 
 		if a == nil {
 			continue
 		}
-		kind, account := a.AccountInfo()
-		if kind == "api_key" {
-			// Never hand an API key out through the view: name it by its label, or its last four.
-			account = maskedAPIKeyName(a.Label, account)
-		}
+		account := SafeAccountName(a)
 		qc := QuotaCredential{
 			ID: a.ID, Account: account, Provider: a.Provider, Pools: []string{},
 			Disabled: a.Disabled || a.Status == StatusDisabled, Unavailable: a.Unavailable,
@@ -162,6 +158,19 @@ func containsString(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// SafeAccountName is the credential's account for management views. An API key is
+// never handed out: it is named by its label, or its last four characters.
+func SafeAccountName(a *Auth) string {
+	if a == nil {
+		return ""
+	}
+	kind, account := a.AccountInfo()
+	if kind == "api_key" {
+		return maskedAPIKeyName(a.Label, account)
+	}
+	return account
 }
 
 // maskedAPIKeyName names an API-key credential without revealing the key.

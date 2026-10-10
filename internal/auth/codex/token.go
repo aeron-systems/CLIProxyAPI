@@ -69,7 +69,7 @@ func (ts *CodexTokenStorage) SaveTokenToFile(authFilePath string) error {
 		return fmt.Errorf("failed to merge metadata: %w", errMerge)
 	}
 
-	f, err := os.Create(authFilePath)
+	f, err := misc.CreateCredentialFile(authFilePath)
 	if err != nil {
 		return fmt.Errorf("failed to create token file: %w", err)
 	}

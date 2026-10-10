@@ -3,6 +3,7 @@ package misc
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -24,6 +25,35 @@ func LogSavingCredentials(path string) {
 // LogCredentialSeparator adds a visual separator to group auth/key processing logs.
 func LogCredentialSeparator() {
 	log.Debug(credentialSeparator)
+}
+
+// CreateCredentialFile opens path for writing with owner-only permissions.
+// An existing file is truncated and tightened to 0600, so a file created
+// earlier with a looser mode does not stay readable by others after a refresh.
+func CreateCredentialFile(path string) (*os.File, error) {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if errChmod := f.Chmod(0o600); errChmod != nil {
+		_ = f.Close()
+		return nil, errChmod
+	}
+	return f, nil
+}
+
+// WriteCredentialFile writes data to path with owner-only permissions,
+// tightening an existing file to 0600.
+func WriteCredentialFile(path string, data []byte) error {
+	f, err := CreateCredentialFile(path)
+	if err != nil {
+		return err
+	}
+	if _, errWrite := f.Write(data); errWrite != nil {
+		_ = f.Close()
+		return errWrite
+	}
+	return f.Close()
 }
 
 // MergeMetadata serializes the source struct into a map and merges the provided metadata into it.

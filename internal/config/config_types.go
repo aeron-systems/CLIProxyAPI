@@ -372,6 +372,21 @@ type RoutingConfig struct {
 	// Default: true. Ignored when SessionAffinity is false.
 	SessionAffinitySubagents *bool `yaml:"session-affinity-subagents,omitempty" json:"session-affinity-subagents,omitempty"`
 
+	// SessionAffinityMove lets a pinned session leave its credential under the
+	// reset-first strategy: when that credential's weekly window reaches
+	// SessionAffinityMoveThreshold percent used, or when another credential in the
+	// pool resets at least SessionAffinityMoveMargin sooner and still has room.
+	// Default: true with reset-first and session affinity; ignored otherwise.
+	SessionAffinityMove *bool `yaml:"session-affinity-move,omitempty" json:"session-affinity-move,omitempty"`
+
+	// SessionAffinityMoveThreshold is the weekly percent used (0-100] at which a
+	// credential counts as nearly used up. Default: 90.
+	SessionAffinityMoveThreshold *float64 `yaml:"session-affinity-move-threshold,omitempty" json:"session-affinity-move-threshold,omitempty"`
+
+	// SessionAffinityMoveMargin is how much sooner another credential's weekly
+	// window must reset before a pinned session moves to it. Default: 24h.
+	SessionAffinityMoveMargin string `yaml:"session-affinity-move-margin,omitempty" json:"session-affinity-move-margin,omitempty"`
+
 	// Pools confine client API keys to named groups of upstream credentials.
 	// When Pools or PoolClients is set, a keyed request is only routed to
 	// credentials in its key's pool, including on retries and failover.

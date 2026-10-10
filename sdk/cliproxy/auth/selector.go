@@ -914,6 +914,7 @@ type SessionAffinitySelector struct {
 	cache            *SessionCache
 	matcher          *cliproxysession.MerklePrefixMatcher
 	subagentAffinity bool
+	movePolicy       *AffinityMovePolicy
 }
 
 // SessionAffinityConfig configures the session affinity selector.
@@ -921,6 +922,9 @@ type SessionAffinityConfig struct {
 	Fallback         Selector
 	TTL              time.Duration
 	SubagentAffinity *bool
+	// MovePolicy, when set and the fallback is reset-first, lets a bound session
+	// move to a credential that resets sooner or off one that is nearly used up.
+	MovePolicy *AffinityMovePolicy
 }
 
 // NewSessionAffinitySelector creates a new session-aware selector.
@@ -948,7 +952,19 @@ func NewSessionAffinitySelectorWithConfig(cfg SessionAffinityConfig) *SessionAff
 		cache:            NewSessionCache(cfg.TTL),
 		matcher:          cliproxysession.NewMerklePrefixMatcher(cfg.TTL),
 		subagentAffinity: subagentAffinity,
+		movePolicy:       cfg.MovePolicy,
 	}
+}
+
+// resetFirstMove returns a credential a bound session should move to, if any.
+func (s *SessionAffinitySelector) resetFirstMove(bound *Auth, candidates []*Auth, model string, now time.Time) (*Auth, string) {
+	if s.movePolicy == nil {
+		return nil, ""
+	}
+	if _, ok := s.fallback.(*ResetFirstSelector); !ok {
+		return nil, ""
+	}
+	return affinityMoveTarget(s.movePolicy, bound, candidates, model, now)
 }
 
 // Trees returns a backward-compatible in-memory session tree store.
@@ -1059,6 +1075,11 @@ func (s *SessionAffinitySelector) Pick(ctx context.Context, provider, model stri
 	if cachedAuthID, ok := s.cache.GetAndRefresh(cacheKey); ok {
 		for _, auth := range available {
 			if auth.ID == cachedAuthID {
+				if target, reason := s.resetFirstMove(auth, fallbackAuths, model, now); target != nil {
+					bind(target.ID)
+					entry.Infof("session-affinity: moved | session=%s from=%s auth=%s provider=%s model=%s reason=%s", truncateSessionID(primaryID), auth.ID, target.ID, provider, model, reason)
+					return target, nil
+				}
 				bind(auth.ID)
 				entry.Infof("session-affinity: cache hit | session=%s auth=%s provider=%s model=%s", truncateSessionID(primaryID), auth.ID, provider, model)
 				return auth, nil
@@ -1082,6 +1103,11 @@ func (s *SessionAffinitySelector) Pick(ctx context.Context, provider, model stri
 			for _, auth := range available {
 				if auth.ID == cachedAuthID {
 					if !isSubagent || s.subagentAffinity {
+						if target, reason := s.resetFirstMove(auth, fallbackAuths, model, now); target != nil {
+							bind(target.ID)
+							entry.Infof("session-affinity: moved | session=%s parent=%s from=%s auth=%s provider=%s model=%s reason=%s", truncateSessionID(primaryID), truncateSessionID(fallbackID), auth.ID, target.ID, provider, model, reason)
+							return target, nil
+						}
 						bind(auth.ID)
 						if isFork {
 							entry.Infof("session-affinity: fork cache hit | session=%s parent=%s auth=%s provider=%s model=%s", truncateSessionID(primaryID), truncateSessionID(fallbackID), auth.ID, provider, model)
