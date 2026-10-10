@@ -119,7 +119,7 @@ func MergeRefreshedAuth(base, current, updated *Auth) *Auth {
 			merged.Status = current.Status
 			merged.Unavailable = current.Unavailable
 			merged.StatusMessage = current.StatusMessage
-		} else if current.Quota.Exceeded && current.Quota.Reason == "credential_quota" && current.Quota.NextRecoverAt.After(time.Now()) {
+		} else if isCredentialWideCooldown(current.Quota, time.Now()) {
 			// Preserve active credential quota
 			merged.Unavailable = current.Unavailable
 			merged.Status = current.Status

@@ -833,7 +833,7 @@ func isAuthBlockedForModel(auth *Auth, model string, now time.Time) (bool, block
 	if exp, ok := auth.AccessTokenExpirationTime(); ok && !exp.IsZero() && !exp.After(now) {
 		return true, blockReasonOther, time.Time{}
 	}
-	if auth.Quota.Exceeded && auth.Quota.Reason == "credential_quota" && auth.Quota.NextRecoverAt.After(now) {
+	if isCredentialWideCooldown(auth.Quota, now) {
 		return true, blockReasonCooldown, auth.Quota.NextRecoverAt
 	}
 	if model != "" {
@@ -876,7 +876,7 @@ func isAuthBlockedForModel(auth *Auth, model string, now time.Time) (bool, block
 	// is an aggregate of single-model quota cooldowns (reason "quota"). As long as the credential
 	// itself is not unavailable (not all models failed) and not under a credential-wide quota,
 	// do not treat individual model cooldowns as blocking the entire credential.
-	if len(auth.ModelStates) > 0 && auth.Quota.Reason != "credential_quota" && !auth.Unavailable {
+	if len(auth.ModelStates) > 0 && auth.Quota.Reason != "credential_quota" && !isCredentialDenialReason(auth.Quota.Reason) && !auth.Unavailable {
 		quotaExceeded = false
 	}
 	return availabilityBlock(auth.Unavailable, quotaExceeded, auth.NextRetryAfter, auth.Quota.NextRecoverAt, now)

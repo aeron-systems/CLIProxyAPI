@@ -29,7 +29,7 @@ func CooldownSnapshotForAuth(auth *Auth, now time.Time) []CooldownView {
 	}
 	// Match the explicit credential-wide gate in isAuthBlockedForModel. Other
 	// auth-level fields can be model aggregates and must not become global gates.
-	if auth.Quota.Exceeded && auth.Quota.Reason == "credential_quota" && auth.Quota.NextRecoverAt.After(now) {
+	if isCredentialWideCooldown(auth.Quota, now) {
 		views = append(views, newCooldownView("credential", "", auth.Quota.NextRecoverAt, now, auth.Quota, auth.StatusMessage, auth.LastError))
 	} else if len(auth.ModelStates) == 0 {
 		if blocked, _, next := availabilityBlock(auth.Unavailable, auth.Quota.Exceeded, auth.NextRetryAfter, auth.Quota.NextRecoverAt, now); blocked && next.After(now) {
@@ -94,14 +94,14 @@ func newCooldownView(scope, model string, next, now time.Time, quota QuotaState,
 	// Zero recovery times can occur in legacy quota state with only a retry time.
 	if quota.Exceeded && (quota.NextRecoverAt.IsZero() || !quota.NextRecoverAt.Before(next)) {
 		switch quota.Reason {
-		case "credential_quota", "quota":
+		case "credential_quota", "quota", "payment_required", "forbidden":
 			view.Reason = quota.Reason
 		case "cloudflare challenge":
 			view.Reason = "cloudflare_challenge"
 		}
 	}
 	propagatedQuota := quota.Exceeded && quota.Reason == "credential_quota"
-	if view.Reason == "credential_quota" {
+	if view.Reason == "credential_quota" || isCredentialDenialReason(view.Reason) {
 		// The credential-wide gate takes precedence over stale sibling errors.
 		return view
 	}

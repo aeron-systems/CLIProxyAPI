@@ -156,6 +156,7 @@ routing:
   # that credential's weekly window reaches the threshold (percent used), or when
   # another credential resets at least the margin sooner and is still under the
   # threshold and not at its 5-hour cap. Default: on, 90, "24h".
+  # Credentials with no known weekly utilization (for example Codex, reported as -1) never move.
   # session-affinity-move: true
   # session-affinity-move-threshold: 90
   # session-affinity-move-margin: "24h"
