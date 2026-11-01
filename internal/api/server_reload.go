@@ -22,6 +22,21 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// configureClientUsage points the per-client usage counts at their file and
+// starts saving them. The file sits beside the auth directory, never inside it
+// (the auth watcher would read it as a credential file).
+func configureClientUsage(cfg *config.Config) {
+	if cfg == nil {
+		return
+	}
+	authDir, err := util.ResolveAuthDir(cfg.AuthDir)
+	if err != nil {
+		return
+	}
+	clientusage.Default().SetPath(filepath.Join(filepath.Dir(authDir), "usage-by-client.json"))
+	clientusage.StartFlusher()
+}
+
 func (s *Server) applyAccessConfig(oldCfg, newCfg *config.Config) bool {
 	if s == nil || s.accessManager == nil || newCfg == nil {
 		return false
@@ -96,13 +111,8 @@ func (s *Server) UpdateClientsContext(ctx context.Context, cfg *config.Config) b
 		redisqueue.SetRetentionSeconds(cfg.RedisUsageQueueRetentionSeconds)
 	}
 
-	// Per-client usage is kept beside the auth directory, never inside it (the
-	// auth watcher would read it as a credential file).
 	if oldCfg == nil || oldCfg.AuthDir != cfg.AuthDir {
-		if authDir, errDir := util.ResolveAuthDir(cfg.AuthDir); errDir == nil {
-			clientusage.Default().SetPath(filepath.Join(filepath.Dir(authDir), "usage-by-client.json"))
-			clientusage.StartFlusher()
-		}
+		configureClientUsage(cfg)
 	}
 
 	if s.requestLogger != nil && (oldCfg == nil || oldCfg.ErrorLogsMaxFiles != cfg.ErrorLogsMaxFiles) {
