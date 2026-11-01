@@ -3,11 +3,13 @@ package api
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/access"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/cache"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/clientusage"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/managementasset"
@@ -92,6 +94,15 @@ func (s *Server) UpdateClientsContext(ctx context.Context, cfg *config.Config) b
 
 	if oldCfg == nil || oldCfg.RedisUsageQueueRetentionSeconds != cfg.RedisUsageQueueRetentionSeconds {
 		redisqueue.SetRetentionSeconds(cfg.RedisUsageQueueRetentionSeconds)
+	}
+
+	// Per-client usage is kept beside the auth directory, never inside it (the
+	// auth watcher would read it as a credential file).
+	if oldCfg == nil || oldCfg.AuthDir != cfg.AuthDir {
+		if authDir, errDir := util.ResolveAuthDir(cfg.AuthDir); errDir == nil {
+			clientusage.Default().SetPath(filepath.Join(filepath.Dir(authDir), "usage-by-client.json"))
+			clientusage.StartFlusher()
+		}
 	}
 
 	if s.requestLogger != nil && (oldCfg == nil || oldCfg.ErrorLogsMaxFiles != cfg.ErrorLogsMaxFiles) {
