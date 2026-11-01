@@ -56,8 +56,11 @@ func (c *Counts) add(o Counts) {
 
 // Client is one row of a summary.
 type Client struct {
-	Name          string  `json:"name"`
-	Pool          string  `json:"pool,omitempty"`
+	Name string `json:"name"`
+	Pool string `json:"pool,omitempty"`
+	// Group is filled in by the caller from the current config, so a client
+	// moved to another group takes its whole history with it.
+	Group         string  `json:"group,omitempty"`
 	ShareRequests float64 `json:"share_requests"`
 	ShareTokens   float64 `json:"share_tokens"`
 	Counts

@@ -417,6 +417,9 @@ type PoolClient struct {
 	Name   string `yaml:"name" json:"name"`
 	APIKey string `yaml:"api-key" json:"api-key"`
 	Pool   string `yaml:"pool" json:"pool"`
+	// Group optionally files the client under a heading in the usage dashboard
+	// (for example every Moon user under "moon"). It has no effect on routing.
+	Group string `yaml:"group,omitempty" json:"group,omitempty"`
 }
 
 // OAuthModelAlias defines a model ID alias for a specific channel.
