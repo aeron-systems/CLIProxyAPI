@@ -10,6 +10,9 @@ server:
   # the Access service token.
   host: ""
   port: 8317
+  # cloudflared and tailscale serve connect from localhost; trust their X-Forwarded-For
+  # so the proxy sees (and bans) real visitor IPs.
+  trusted-proxies: ["127.0.0.1", "::1"]
 
 management:
   # The panel and management API are reachable over the tailnet; every call needs the key
@@ -26,6 +29,7 @@ management:
     session-hours: 12
     allowed-emails:
       - eric.vaish@aeronsystems.com
+      - aryan.sharma@aeronsystems.com
   disable-control-panel: false
   # Never pull the panel from GitHub in the background. The panel served is the local
   # file at MANAGEMENT_STATIC_PATH (set in the launchd plist):
