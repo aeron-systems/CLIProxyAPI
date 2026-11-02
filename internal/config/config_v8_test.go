@@ -933,3 +933,19 @@ func TestV8SecretHashResolvesReferences(t *testing.T) {
 		})
 	}
 }
+
+func TestV8ManagementAuth0Loads(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	raw := "management:\n  secret-key: test-secret\n  auth0:\n    domain: tenant.example.com\n    client-id: abc\n    allowed-emails: [a@b.com]\n"
+	if err := os.WriteFile(path, []byte(raw), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := cfg.RemoteManagement.Auth0
+	if a.Domain != "tenant.example.com" || a.ClientID != "abc" || len(a.AllowedEmails) != 1 {
+		t.Fatalf("auth0 block not loaded: %+v", a)
+	}
+}

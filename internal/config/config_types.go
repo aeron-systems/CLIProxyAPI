@@ -331,6 +331,26 @@ type RemoteManagement struct {
 	PanelGitHubRepository string `yaml:"panel-github-repository"`
 	// BaseURL specifies the base URL of the remote management API for TUI client mode (e.g. "https://proxy.example.com").
 	BaseURL string `yaml:"base-url,omitempty" json:"base-url,omitempty"`
+	// Auth0 enables signing in to the management panel with Auth0 instead of the management key.
+	Auth0 ManagementAuth0 `yaml:"auth0,omitempty" json:"-"`
+}
+
+// ManagementAuth0 configures Auth0 sign-in for the management panel and API.
+// A successful sign-in yields a short-lived signed session token that is accepted
+// wherever the management key is.
+type ManagementAuth0 struct {
+	// Domain is the Auth0 tenant or custom login domain, e.g. "aeronsystems.us.auth0.com".
+	Domain string `yaml:"domain,omitempty"`
+	// ClientID is the Auth0 application's client ID.
+	ClientID string `yaml:"client-id,omitempty"`
+	// ClientSecret is the Auth0 application's client secret. MANAGEMENT_AUTH0_CLIENT_SECRET overrides it.
+	ClientSecret string `yaml:"client-secret,omitempty"`
+	// SessionSecret signs session tokens. MANAGEMENT_SESSION_SECRET overrides it.
+	SessionSecret string `yaml:"session-secret,omitempty"`
+	// SessionHours is how long a session token stays valid. Defaults to 12.
+	SessionHours int `yaml:"session-hours,omitempty"`
+	// AllowedEmails lists the verified Auth0 emails allowed to sign in (case-insensitive).
+	AllowedEmails []string `yaml:"allowed-emails,omitempty"`
 }
 
 // QuotaExceeded defines the behavior when API quota limits are exceeded.

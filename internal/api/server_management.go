@@ -24,6 +24,9 @@ func (s *Server) registerManagementRoutes() {
 	s.registerManagementV8Routes()
 	s.engine.POST("/v0/management/oauth-callback", s.managementAvailabilityMiddleware(), s.mgmt.PostOAuthCallback)
 	s.engine.GET("/v0/management/oauth-callback", s.managementAvailabilityMiddleware(), s.mgmt.GetOAuthCallback)
+	s.engine.GET("/v0/management/auth0/status", s.managementAvailabilityMiddleware(), s.mgmt.GetAuth0Status)
+	s.engine.GET("/v0/management/auth0/login", s.managementAvailabilityMiddleware(), s.mgmt.GetAuth0Login)
+	s.engine.GET("/v0/management/auth0/callback", s.managementAvailabilityMiddleware(), s.mgmt.GetAuth0Callback)
 
 	mgmt := s.engine.Group("/v0/management")
 	mgmt.Use(s.managementAvailabilityMiddleware(), s.mgmt.Middleware())

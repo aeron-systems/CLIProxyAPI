@@ -12,9 +12,20 @@ server:
   port: 8317
 
 management:
-  # The panel and management API are reachable over the tailnet; every call needs the key.
+  # The panel and management API are reachable over the tailnet; every call needs the key
+  # or an Auth0 session (below). Scripts keep using the key; people sign in with Auth0.
   allow-remote: true
   secret-key: "__MODEL_PROXY_MANAGEMENT_KEY__"
+  # "Sign in with Auth0" on the panel (work tenant). Only these verified emails get in, and
+  # removing an email here ends that person's sessions at once.
+  auth0:
+    domain: aeronsystems.us.auth0.com
+    client-id: "__MODEL_PROXY_AUTH0_CLIENT_ID__"
+    client-secret: "__MODEL_PROXY_AUTH0_CLIENT_SECRET__"
+    session-secret: "__MODEL_PROXY_SESSION_SECRET__"
+    session-hours: 12
+    allowed-emails:
+      - eric.vaish@aeronsystems.com
   disable-control-panel: false
   # Never pull the panel from GitHub in the background. The panel served is the local
   # file at MANAGEMENT_STATIC_PATH (set in the launchd plist):

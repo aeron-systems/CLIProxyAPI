@@ -387,6 +387,15 @@ func (h *Handler) AuthenticateManagementKey(clientIP string, localClient bool, p
 		return true, 0, ""
 	}
 
+	if strings.HasPrefix(provided, sessionTokenPrefix) {
+		if h.isSessionToken(provided) {
+			reset()
+			return true, 0, ""
+		}
+		fail()
+		return false, http.StatusUnauthorized, "session expired, sign in again"
+	}
+
 	if secretHash == "" || bcrypt.CompareHashAndPassword([]byte(secretHash), []byte(provided)) != nil {
 		fail()
 		return false, http.StatusUnauthorized, "invalid management key"
