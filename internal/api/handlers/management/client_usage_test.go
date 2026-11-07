@@ -60,3 +60,67 @@ func TestGetClientUsage_RejectsUnknownWindow(t *testing.T) {
 		t.Fatalf("status = %d, want 400", rec.Code)
 	}
 }
+
+func TestGetClientCost_PricesRowsAndWarnsOnSpillIntoPaid(t *testing.T) {
+	cfg := &config.Config{AuthDir: t.TempDir()}
+	cfg.Routing.PoolClients = []config.PoolClient{{Name: "cost-test-moon", Pool: "shared", Group: "moon"}}
+	cfg.Routing.Pools = []config.CredentialPool{{Name: "shared-spill", Fallback: "paid"}}
+	counts := clientusage.Counts{Requests: 1, OutputTokens: 1_000_000, TotalTokens: 1_000_000}
+	clientusage.Default().AddModel(time.Now(), "cost-test-moon", "shared", "claude-opus-5-5", counts, counts)
+	clientusage.Default().AddModel(time.Now(), "cost-test-none", "shared", "cost-test-model", counts, counts)
+
+	h := NewHandlerWithoutConfigFilePath(cfg, nil)
+	rec := httptest.NewRecorder()
+	ginCtx, _ := gin.CreateTestContext(rec)
+	ginCtx.Request = httptest.NewRequest(http.MethodGet, "/v8/management/observability/usage/cost?window=1h", nil)
+	h.GetClientCost(ginCtx)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Clients []struct {
+			Name             string   `json:"name"`
+			Group            string   `json:"group"`
+			Dollars          *float64 `json:"dollars"`
+			EstimatedDollars float64  `json:"estimated_dollars"`
+		} `json:"clients"`
+		UnpricedModels []string `json:"unpriced_models"`
+		Prices         struct {
+			AsOf string `json:"as_of"`
+		} `json:"prices"`
+		Warnings []string `json:"warnings"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	seen := 0
+	for _, row := range body.Clients {
+		switch row.Name {
+		case "cost-test-moon":
+			seen++
+			if row.Group != "moon" || row.Dollars == nil || *row.Dollars != 20 || row.EstimatedDollars != 20 {
+				t.Fatalf("moon row = %+v", row)
+			}
+		case "cost-test-none":
+			seen++
+			if row.Dollars != nil {
+				t.Fatalf("no-price row must be null, got %v", *row.Dollars)
+			}
+		}
+	}
+	if seen != 2 || body.Prices.AsOf == "" || len(body.Warnings) != 1 {
+		t.Fatalf("body = %s", rec.Body.String())
+	}
+}
+
+func TestGetClientCost_RejectsBadWindow(t *testing.T) {
+	h := NewHandlerWithoutConfigFilePath(&config.Config{AuthDir: t.TempDir()}, nil)
+	rec := httptest.NewRecorder()
+	ginCtx, _ := gin.CreateTestContext(rec)
+	ginCtx.Request = httptest.NewRequest(http.MethodGet, "/v8/management/observability/usage/cost?window=2y", nil)
+	h.GetClientCost(ginCtx)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d", rec.Code)
+	}
+}
