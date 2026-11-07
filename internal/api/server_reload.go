@@ -33,7 +33,9 @@ func configureClientUsage(cfg *config.Config) {
 	if err != nil {
 		return
 	}
-	clientusage.Default().SetPath(filepath.Join(filepath.Dir(authDir), "usage-by-client.json"))
+	usagePath := filepath.Join(filepath.Dir(authDir), "usage-by-client.json")
+	clientusage.Default().SetPath(usagePath)
+	clientusage.DefaultPrices().SetPath(clientusage.PricesPath(usagePath))
 	clientusage.StartFlusher()
 }
 

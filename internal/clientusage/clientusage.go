@@ -3,8 +3,10 @@
 //
 // Every usage record is added to an hourly bucket under the name of the
 // pool-client its API key belongs to. Buckets are kept for 35 days and saved to
-// one small JSON file so a restart does not reset the picture. The API key
-// itself is never stored, only the client's name.
+// one small JSON file so a restart does not reset the picture. Each bucket also
+// splits its traffic by model, so dollars can be worked out per client and per
+// model (cost.go). Only counts, client names and model names are stored: never
+// the API key, and never anything from a request or response body.
 package clientusage
 
 import (
@@ -28,9 +30,17 @@ const (
 	UnnamedClient = "unnamed key"
 	// InternalClient labels requests that carry no client key (the proxy's own calls).
 	InternalClient = "internal"
+	// UnknownModel labels traffic whose model is not known: rows saved before
+	// models were counted, and model names that fail validation. It has no price.
+	UnknownModel = "unknown"
 
 	retention     = 35 * 24 * time.Hour
 	flushInterval = 30 * time.Second
+
+	// A failed request can carry whatever model name the client sent, so both
+	// the name and the number of names per bucket are capped.
+	maxModelNameLength = 128
+	maxModelsPerCell   = 64
 )
 
 // Counts is the traffic of one client over some period.
@@ -42,6 +52,9 @@ type Counts struct {
 	CacheReadTokens     int64 `json:"cache_read_tokens"`
 	CacheCreationTokens int64 `json:"cache_creation_tokens"`
 	TotalTokens         int64 `json:"total_tokens"`
+	// UnclassifiedTokens is the part of TotalTokens the upstream did not break
+	// down into input, cache and output, so no price can be applied to it.
+	UnclassifiedTokens int64 `json:"unclassified_tokens,omitempty"`
 }
 
 func (c *Counts) add(o Counts) {
@@ -52,6 +65,7 @@ func (c *Counts) add(o Counts) {
 	c.CacheReadTokens += o.CacheReadTokens
 	c.CacheCreationTokens += o.CacheCreationTokens
 	c.TotalTokens += o.TotalTokens
+	c.UnclassifiedTokens += o.UnclassifiedTokens
 }
 
 // Client is one row of a summary.
@@ -77,6 +91,27 @@ type Summary struct {
 type cell struct {
 	Counts
 	Pool string `json:"pool,omitempty"`
+	// Models splits the same traffic by model. Here InputTokens excludes cached
+	// tokens for every provider, so each count takes exactly one price.
+	Models map[string]*Counts `json:"models,omitempty"`
+}
+
+func (cl *cell) addModel(model string, c Counts) {
+	if cl.Models == nil {
+		cl.Models = make(map[string]*Counts)
+	}
+	row := cl.Models[model]
+	if row == nil {
+		if len(cl.Models) >= maxModelsPerCell {
+			model = UnknownModel
+			row = cl.Models[model]
+		}
+		if row == nil {
+			row = &Counts{}
+			cl.Models[model] = row
+		}
+	}
+	row.add(c)
 }
 
 // Store holds the hourly buckets. hour (unix seconds, start of hour) -> client -> cell.
@@ -98,8 +133,14 @@ var defaultStore = NewStore()
 // Default returns the process-wide store the usage plugin feeds.
 func Default() *Store { return defaultStore }
 
-// Add counts one request for client at time t.
+// Add counts one request for client at time t, with its model unknown.
 func (s *Store) Add(t time.Time, client, pool string, c Counts) {
+	s.AddModel(t, client, pool, UnknownModel, c, c)
+}
+
+// AddModel counts one request for client at time t: total goes to the client's
+// figures and priced to its row for the model.
+func (s *Store) AddModel(t time.Time, client, pool, model string, total, priced Counts) {
 	if client == "" {
 		client = UnnamedClient
 	}
@@ -119,7 +160,8 @@ func (s *Store) Add(t time.Time, client, pool string, c Counts) {
 	if pool != "" {
 		cl.Pool = pool
 	}
-	cl.add(c)
+	cl.add(total)
+	cl.addModel(cleanModel(model), priced)
 	s.dirty = true
 }
 
@@ -228,6 +270,16 @@ func (s *Store) SetPath(path string) {
 				cur.Pool = cl.Pool
 			}
 			cur.add(cl.Counts)
+			for model, row := range cl.Models {
+				if row != nil {
+					cur.addModel(cleanModel(model), *row)
+				}
+			}
+			// A row saved before models were counted stays visible as unknown,
+			// rather than dropping out of the dollars as if it were free.
+			if len(cl.Models) == 0 && cl.Counts != (Counts{}) {
+				cur.addModel(UnknownModel, cl.Counts)
+			}
 		}
 	}
 }
@@ -246,7 +298,7 @@ func (s *Store) Flush() error {
 		s.mu.Unlock()
 		return nil
 	}
-	raw, err := json.Marshal(file{Version: 1, Hours: s.data})
+	raw, err := json.Marshal(file{Version: 2, Hours: s.data})
 	path := s.path
 	s.dirty = false
 	s.mu.Unlock()
@@ -314,7 +366,53 @@ func (p *plugin) HandleUsage(_ context.Context, record coreusage.Record) {
 	if record.Failed {
 		c.Failed = 1
 	}
-	defaultStore.Add(at, name, pool, c)
+	defaultStore.AddModel(at, name, pool, modelOf(record), c, pricedCounts(c, detail))
+}
+
+// modelOf prefers the model the upstream says answered over the one requested.
+func modelOf(record coreusage.Record) string {
+	for _, model := range []string{record.ResponseModel, record.Model, record.Alias} {
+		if strings.TrimSpace(model) != "" {
+			return model
+		}
+	}
+	return UnknownModel
+}
+
+// pricedCounts turns a request's counts into mutually exclusive token buckets.
+// Providers disagree on whether input includes cached tokens, and the breakdown
+// is what irons that out; reading InputTokens directly would charge some
+// providers' cached tokens twice.
+func pricedCounts(c Counts, detail coreusage.Detail) Counts {
+	b := detail.TokenBreakdown
+	c.InputTokens = b.Input.UncachedTokens
+	c.OutputTokens = b.Output.TotalTokens
+	c.CacheReadTokens = b.Input.CacheReadTokens
+	c.CacheCreationTokens = b.Input.CacheWriteTokens
+	c.UnclassifiedTokens = b.UnclassifiedTokens
+	return c
+}
+
+// cleanModel returns a model name safe to keep, or UnknownModel. Suffixes that
+// are request options rather than part of the name, such as "(high)" or "[1m]",
+// are dropped so they do not split one model into several rows.
+func cleanModel(model string) string {
+	model = strings.ToLower(strings.TrimSpace(model))
+	if i := strings.IndexAny(model, "(["); i > 0 {
+		model = strings.TrimSpace(model[:i])
+	}
+	if model == "" || len(model) > maxModelNameLength {
+		return UnknownModel
+	}
+	for _, r := range model {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+		case r == '-', r == '_', r == '.', r == ':', r == '/', r == '@':
+		default:
+			return UnknownModel
+		}
+	}
+	return model
 }
 
 func clientFor(apiKey string) (name, pool string) {
